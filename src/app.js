@@ -3,7 +3,8 @@ import cors from 'cors';
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import joi from 'joi';
-import bcrypt from 'bcrypt';
+import bcrypt, { compareSync } from 'bcrypt';
+import { v4 as uuid } from 'uuid';
 
 
 dotenv.config();
@@ -57,20 +58,50 @@ const db = mongoClient.db();
 
 server.post("/sign-up", async (req, res) => {
     const cadastroDados = req.body;
+    const erroCadastro = validaDados(cadastroSchema, cadastroDados);
+    if (erroCadastro) return res.status(422).send("Verifique o preenchimento dos campos");
 
-    const erroCadastro = validaDados(cadastroSchema, cadastroDados); 
-    if(erroCadastro) return res.status(422).send("Verifique o preenchimento dos campos");
+    try {
+        const buscaUsuario = await db.collection("usuarios").findOne({ emailUsuario: cadastroDados.email });
+        if (buscaUsuario) return res.status(409).send("Esse email já está sendo usado");
 
-    const usuario = await db.collection("usuarios").findOne({emailUsuario: cadastroDados.email});
-    if(usuario) return res.status(409).send("Esse email já está sendo usado");
+        const senhaHash = bcrypt.hashSync(cadastroDados.senha, 10);
 
-    const senhaHash = bcrypt.hashSync(cadastroDados.senha, 10);
+        await db.collection("usuarios").insertOne({
+            nomeUsuario: cadastroDados.nome,
+            emailUsuario: cadastroDados.email,
+            senhaUsuario: senhaHash
+        });
+        res.status(201).send("Usuário cadastrado com sucesso!");
+    } catch (erro) {
+        res.status(500).send(erro.message);
+    }
+});
 
-    await db.collection("usuarios").insertOne({nomeUsuario: cadastroDados.nome,
-        emailUsuario: cadastroDados.email,
-        senhaUsuario: senhaHash 
-    });
-    res.status(201).send("Usuário cadastrado com sucesso!");
+server.post("/", async (req, res) => {
+    const loginDados = req.body;
+    const erroLogin = validaDados(loginSchema, loginDados);
+    if (erroLogin) return res.status(422).send("Preencha corretamente os campos");
+
+    try {
+        const usuario = await db.collection("usuarios").findOne({ emailUsuario: loginDados.email });
+        if (!usuario) return res.status(401).send("Usuário não cadastrado");
+      
+        if (compareSync(loginDados.senha, usuario.senhaUsuario)) {
+            const token = uuid();
+            await db.collection("sessoes").insertOne({idUsuario: usuario._id, token});
+            return res.status(200).send("Sessão criada");
+        }
+        res.status(401).send("Usuário ou senha inválido");
+        
+    } catch (erro) {
+        res.status(500).send(erro.message);
+    }
+
+
+
 })
+
+
 
 
