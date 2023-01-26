@@ -35,7 +35,7 @@ export async function novaMovimentacao(req, res){
             idUsuario: usuario.idUsuario,
             tipo: transacaoDados.tipo,
             data: dayjs().format('DD/MM'),
-            valor: transacaoDados.valor,
+            valor: parseFloat(transacaoDados.valor).toFixed(2),
             descricao: transacaoDados.descricao
         });
         res.status(201).send("OK");
